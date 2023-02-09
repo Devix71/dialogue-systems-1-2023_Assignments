@@ -30,6 +30,30 @@ const grammar: Grammar = {
     intent: "None",
     entities: { time: "10:00" },
   },
+  "on monday": {
+    intent: "None",
+    entities: { day: "Monday" },
+  },
+  "on tuesday": {
+    intent: "None",
+    entities: { day: "Tuesday" },
+  },
+  "on wednesday": {
+    intent: "None",
+    entities: { day: "Wednesday" },
+  },
+  "on thursday": {
+    intent: "None",
+    entities: { day: "Thursday" },
+  },
+  "on saturday": {
+    intent: "None",
+    entities: { day: "Saturday" },
+  },
+  "on sunday": {
+    intent: "None",
+    entities: { day: "Sunday" },
+  },
 };
 
 const getEntity = (context: SDSContext, entity: string) => {
