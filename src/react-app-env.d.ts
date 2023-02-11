@@ -25,6 +25,8 @@ interface Settings {
 }
 
 interface SDSContext {
+  time: any;
+  whole: any;
   parameters: Parameters;
   asr: SpeechRecognition;
   tts: SpeechSynthesis;
@@ -34,8 +36,13 @@ interface SDSContext {
   ttsAgenda: string;
   azureAuthorizationToken: string;
   audioCtx: any;
+  decision: any
 
   title: any;
+  day: any;
+  get titleValue(): string {
+    return this.title;
+  }
 }
 
 type SDSEvent =
