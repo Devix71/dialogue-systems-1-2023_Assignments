@@ -207,6 +207,9 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           })),
           on: { ENDSPEECH: "final_ask" },
         },
+        final_ask:{
+          entry: send("LISTEN")
+        },
         final_time_prompt:{
           entry: send((context) => ({
             type: "SPEAK",
@@ -214,7 +217,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           })),
           on: { ENDSPEECH: "final_time_ask" },
         },
-        
+        final_time_ask:{
+          entry: send("LISTEN")
+        },
+        final_message:{
+          entry: say("Your meeting has been created!")
+        },
+
 
         nomatch_topic: {
           entry: say(
@@ -236,8 +245,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
         type: "SPEAK",
         value: `OK, ${context.whole}`,
       })),
-      on: { ENDSPEECH: (context: { whole: string; }) => context.whole === "yes" ? "time_prompt" : "final_prompt" },
-    },
+      on: { ENDSPEECH: [
+        { target: "time_prompt", cond: (context: { whole: string; }) => context.whole === "yes" },
+        { target: "final_prompt", cond: (context: { whole: string; }) => context.whole === "no" },
+      ]}
+        },
     info_day: {
       entry: send((context) => ({
         type: "SPEAK",
@@ -252,6 +264,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
       })),
       on: { ENDSPEECH: "final_time_prompt" },
     },
+    info_decision: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `OK, ${context.decision}`,
+      })),
+      on: { ENDSPEECH: "final_message" },
+    }
 
 
     
