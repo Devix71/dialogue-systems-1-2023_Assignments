@@ -1,3 +1,4 @@
+import { resolve } from "path";
 import { MachineConfig, send, Action, assign } from "xstate";
 
 function say(text: string): Action<SDSContext, SDSEvent> {
@@ -26,43 +27,47 @@ const grammar: Grammar = {
     intent: "None",
     entities: { day: "Friday" },
   },
-  "at 8:00": { 
+  "at 8:00 am": { 
     intent: "None",
-    entities: { time: "8:00" },
+    entities: { time: "8:00 AM" },
   },
-  "at 9:00": { 
+  "at 9:00 am": { 
     intent: "None",
-    entities: { time: "9:00" },
-  },"at 10:00": { 
+    entities: { time: "9:00 AM" },
+  },"at 10:00 am": { 
     intent: "None",
-    entities: { time: "10:00" },
-  },"at 11:00": { 
+    entities: { time: "10:00 AM" },
+  },"at 11:00 am": { 
     intent: "None",
-    entities: { time: "11:00" },
+    entities: { time: "11:00 AM" },
   },"at noon": { 
     intent: "None",
-    entities: { time: "12:00" },
-  },"at 1:00 pm": { 
+    entities: { time: "12:00 PM" },
+  },"at 12:00 am": { 
     intent: "None",
-    entities: { time: "13:00" },
+    entities: { time: "12:00 PM" },
+  },
+  "at 1:00 pm": { 
+    intent: "None",
+    entities: { time: "13:00 PM" },
   },"at 2:00 pm": { 
     intent: "None",
-    entities: { time: "14:00" },
+    entities: { time: "14:00 PM" },
   },"at 3:00 pm": { 
     intent: "None",
-    entities: { time: "15:00" },
+    entities: { time: "15:00 PM" },
   },"at 4:00 pm": { 
     intent: "None",
-    entities: { time: "16:00" },
+    entities: { time: "16:00 PM" },
   },"at 5:00 pm": { 
     intent: "None",
-    entities: { time: "17:00" },
+    entities: { time: "17:00 PM" },
   },"at 6:00 pm": { 
     intent: "None",
-    entities: { time: "18:00" },
+    entities: { time: "18:00 PM" },
   },"at 7:00 pm": { 
     intent: "None",
-    entities: { time: "19:00" },
+    entities: { time: "19:00 PM" },
   },
   "on monday": {
     intent: "None",
@@ -90,19 +95,40 @@ const grammar: Grammar = {
   },
   "yes": {
     intent: "None",
-    entities: { whole: "Yes", decision: "Yes" },
+    entities: { whole: "Yes", decision: "Yes", meeting:"Yes" },
   },
   "no": {
     intent: "None",
-    entities: { whole: "No", decision: "No" },
+    entities: { whole: "No", decision: "No", meeting: "No" },
+  },
+  "create a meeting": {
+    intent: "None",
+    entities: { menu: "meeting"},
   }
+  
+};
+const setEntity_Query = (context: SDSContext) => {
+
+  
+  let u = String(context);
+  console.log(u.split("?")[0].split(" ").slice(2).join(" "));
+  return u.split("?")[0].split(" ").slice(2).join(" ");
+  
+};
+
+
+const setEntity = (context: SDSContext) => {
+
+  
+  let u = String(context.recResult[0].utterance);
+  console.log(u);
+  return u;
   
 };
 
 const getEntity = (context: SDSContext, entity: string) => {
   // lowercase the utterance and remove tailing "."
   let u = context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "");
-  console.log(u);
   if (u in grammar) {
     if (entity in grammar[u].entities) {
       return grammar[u].entities[entity];
@@ -111,7 +137,17 @@ const getEntity = (context: SDSContext, entity: string) => {
   return false;
 };
 
+const kbRequest = (text: string) =>
 
+
+  fetch(
+    new Request(
+      `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`
+    )
+  ).then((data) => data.json());
+    
+
+  let result = null
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
   initial: "idle",
   states: {
@@ -122,11 +158,170 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     init: {
       on: {
-        TTS_READY: "welcome",
-        CLICK: "welcome",
+        TTS_READY: "intro",
+        CLICK: "intro",
       },
     },
-    welcome: {
+    intro: {
+      initial: "intro",
+      on: {
+        RECOGNISED: [
+          {
+            target: "intro_info",
+            actions: assign({
+              username: (context) => setEntity(context, "username"),
+            }),
+          },
+        ],
+        TIMEOUT: ".intro",
+      },
+      states: {
+        intro: {
+          entry: say("Hello, I am your personal assistant, how may I address you?"),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I didn't quite get that, please tell me once more."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+      },
+    },
+    intro_info: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Hello ${context.username}`,
+      })),
+      on: { ENDSPEECH: "menu" },
+    },
+    menu: {
+      initial: "menu_choice",
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_meeting",
+            cond: (context) => !!getEntity(context, "menu"),
+            actions: assign({
+              menu: (context) => getEntity(context, "menu"),
+            }),
+          },
+          {
+            target: "search",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") != "create a meeting",
+            actions: assign(
+            {
+              
+              query: (context) => setEntity_Query(context.recResult[0].utterance),
+            }),
+          },   
+          {
+            target: ".nomatch",
+          },
+        ],
+        TIMEOUT: ".menu_choice",
+      },
+      states: {
+        menu_choice: {
+          entry: say(`What would you like me to do?`),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+      },
+    },
+    search: {
+      invoke: {
+        src: (context, event) => kbRequest(context.query),
+        onDone: {
+          target: 'success',
+          actions: assign(
+            {
+              
+              result: (context,event) => event.data.Abstract,
+              title: (context) => context.query
+            }),
+        },
+        onError: {
+          target: 'failure',
+          actions: (context, event) => console.log(event.data)
+        }
+      }
+    },
+    success: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `OK, ${context.result}`,
+      })),
+      on: { ENDSPEECH: "meeting_ask" },
+    },
+    meeting_ask: {
+      initial: "prompt",
+      on: {
+        RECOGNISED: [
+          {
+            target: "info",
+            cond: (context) => getEntity(context, "meeting") === "Yes",
+            actions: assign({
+              meeting: (context) => getEntity(context, "meeting"),
+              title: (context) => `meeting with ${context.query}`,
+            }),
+          },
+          {
+            target: "idle",
+            cond: (context) => getEntity(context, "meeting") === "No",
+            actions: assign({
+              meeting: (context) => getEntity(context, "meeting"),
+            }),
+          },          
+          {
+            target: ".nomatch",
+          },
+        ],
+        TIMEOUT: ".prompt",
+      },
+      states: {
+        prompt: {
+          entry: say("Would you like to meet them?"),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+      },
+    },
+
+    failure: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `I don't know who that is.`,
+      })),
+      on: { ENDSPEECH: "menu" },
+    },
+    info_meeting: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `OK, let's create a ${context.menu}`,
+      })),
+      on: { ENDSPEECH: "meeting" },
+    },
+    meeting: {
       initial: "prompt",
       on: {
         RECOGNISED: [
@@ -145,7 +340,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
       },
       states: {
         prompt: {
-          entry: say("Let's create a meeting. What is it about?"),
+          entry: say("What is it about?"),
           on: { ENDSPEECH: "ask" },
         },
         ask: {
@@ -398,9 +593,3 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
   },
 };
-const kbRequest = (text: string) =>
-  fetch(
-    new Request(
-      `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`
-    )
-  ).then((data) => data.json());
