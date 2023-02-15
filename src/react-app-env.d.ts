@@ -25,6 +25,9 @@ interface Settings {
 }
 
 interface SDSContext {
+  menu: any;
+
+
   time: any;
   whole: any;
   decision: any;
