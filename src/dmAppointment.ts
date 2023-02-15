@@ -51,25 +51,25 @@ const grammar: Grammar = {
   },
   "at 1:00 pm": { 
     intent: "None",
-    entities: { time: "13:00 PM" },
+    entities: { time: "1:00 PM" },
   },"at 2:00 pm": { 
     intent: "None",
-    entities: { time: "14:00 PM" },
+    entities: { time: "2:00 PM" },
   },"at 3:00 pm": { 
     intent: "None",
-    entities: { time: "15:00 PM" },
+    entities: { time: "3:00 PM" },
   },"at 4:00 pm": { 
     intent: "None",
-    entities: { time: "16:00 PM" },
+    entities: { time: "4:00 PM" },
   },"at 5:00 pm": { 
     intent: "None",
-    entities: { time: "17:00 PM" },
+    entities: { time: "5:00 PM" },
   },"at 6:00 pm": { 
     intent: "None",
-    entities: { time: "18:00 PM" },
+    entities: { time: "6:00 PM" },
   },"at 7:00 pm": { 
     intent: "None",
-    entities: { time: "19:00 PM" },
+    entities: { time: "7:00 PM" },
   },
   "on monday": {
     intent: "None",
