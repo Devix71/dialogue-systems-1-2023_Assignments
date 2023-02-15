@@ -1,10 +1,12 @@
-import { resolve } from "path";
+// Importing required functions and types from xstate library
 import { MachineConfig, send, Action, assign } from "xstate";
 
+// A function that returns an xstate action to send a "SPEAK" event with a given text value
 function say(text: string): Action<SDSContext, SDSEvent> {
   return send((_context: SDSContext) => ({ type: "SPEAK", value: text }));
 }
 
+// An interface for defining grammar rules with intent and entity values
 interface Grammar {
   [index: string]: {
     intent: string;
@@ -13,7 +15,7 @@ interface Grammar {
     };
   };
 }
-
+// An object that defines various grammar rules with intent and entity values
 const grammar: Grammar = {
   lecture: {
     intent: "None",
@@ -107,25 +109,28 @@ const grammar: Grammar = {
   }
   
 };
+
+// This function extracts the entity from the context and removes any query parameters and spaces from it
 const setEntity_Query = (context: SDSContext) => {
 
   
   let u = String(context);
-  console.log(u.split("?")[0].split(" ").slice(2).join(" "));
+
   return u.split("?")[0].split(" ").slice(2).join(" ");
   
 };
 
-
+// This function extracts the entity from the context and returns it
 const setEntity = (context: SDSContext) => {
 
   
   let u = String(context.recResult[0].utterance);
-  console.log(u);
+
   return u;
   
 };
 
+// This function checks if the provided entity is present in the grammar object and returns it if found
 const getEntity = (context: SDSContext, entity: string) => {
   // lowercase the utterance and remove tailing "."
   let u = context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "");
@@ -137,6 +142,7 @@ const getEntity = (context: SDSContext, entity: string) => {
   return false;
 };
 
+// This function sends a request to DuckDuckGo's API with the provided text and returns the JSON response
 const kbRequest = (text: string) =>
 
 
@@ -147,7 +153,7 @@ const kbRequest = (text: string) =>
   ).then((data) => data.json());
     
 
-  let result = null
+// This exports a state machine for a dialogue manager 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
   initial: "idle",
   states: {
