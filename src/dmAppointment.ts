@@ -126,6 +126,8 @@ const setEntity = (context: SDSContext) => {
   
   let u = String(context.recResult[0].utterance);
 
+  console.log(u)
+
   return u;
   
 };
@@ -141,6 +143,35 @@ const getEntity = (context: SDSContext, entity: string) => {
   }
   return false;
 };
+const getIntents = (uttering: string) =>
+  fetch(
+    new Request("https://langauge-res-20345.cognitiveservices.azure.com/language/:analyze-conversations?api-version=2022-10-01-preview", {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": "1a397e0824494c3181333cc861fa156f",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "Conversation",
+        analysisInput: {
+          conversationItem: {
+            id: "PARTICIPANT_ID_HERE",
+            text: uttering,
+            modality: "text",
+            language: "en-US",
+            participantId: "PARTICIPANT_ID_HERE",
+          },
+        },
+        parameters: {
+          projectName: "appointments",
+          verbose: true,
+          deploymentName: "appointment",
+          stringIndexType: "TextElement_V8",
+        },
+      }),
+    })
+  ).then((data) => data.json());
+
 
 // This function sends a request to DuckDuckGo's API with the provided text and returns the JSON response
 const kbRequest = (text: string) =>
@@ -246,6 +277,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
         },
       },
     },
+    intent: {
+      invoke: {
+        src: (context, event) => getIntents(context.title_test),
+        onDone: {
+          target: 'success_intent',
+          actions: assign(
+            {
+              
+              title: (context,event) => event.data.result.prediction.entities[0].text,
+              //title: (context) => context.title
+            }),
+        },
+        onError: {
+          target: 'failure_intent',
+          actions: (context, event) => console.log(event.data)
+        }
+      }
+    },
+    success_intent: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `OK, ${context.title}`,
+      })),
+      on: { ENDSPEECH: "info" },
+    },
+    failure_intent: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `I don't know who that is.`,
+      })),
+      on: { ENDSPEECH: "menu" },
+    },
     search: {
       invoke: {
         src: (context, event) => kbRequest(context.query),
@@ -332,10 +395,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
       on: {
         RECOGNISED: [
           {
-            target: "info",
-            cond: (context) => !!getEntity(context, "title"),
+            target: "intent",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") != null,
             actions: assign({
-              title: (context) => getEntity(context, "title"),
+              title_test: (context) => setEntity(context, "title_test"),
+
             }),
           },
           {

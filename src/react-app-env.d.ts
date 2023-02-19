@@ -35,6 +35,7 @@ interface ChatInput {
 }
 
 interface SDSContext {
+  title_test: string;
   menu: any;
 
 
