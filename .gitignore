@@ -33,3 +33,7 @@ yarn-error.log*
 .parcel-cache/e0ff2bac7c21dcee
 .parcel-cache/e6301361fe420b90
 .parcel-cache/f46693e18cff83c5
+.parcel-cache/a9f5484dda8bfe2c
+.gitignore
+.parcel-cache/lock.mdb
+.parcel-cache/data.mdb
