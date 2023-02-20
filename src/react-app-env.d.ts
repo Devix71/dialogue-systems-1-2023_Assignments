@@ -35,6 +35,7 @@ interface ChatInput {
 }
 
 interface SDSContext {
+  query: any;
   title_test: string;
   menu: any;
 
