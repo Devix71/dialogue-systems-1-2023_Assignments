@@ -6,109 +6,7 @@ function say(text: string): Action<SDSContext, SDSEvent> {
   return send((_context: SDSContext) => ({ type: "SPEAK", value: text }));
 }
 
-// An interface for defining grammar rules with intent and entity values
-interface Grammar {
-  [index: string]: {
-    intent: string;
-    entities: {
-      [index: string]: string;
-    };
-  };
-}
-// An object that defines various grammar rules with intent and entity values
-const grammar: Grammar = {
-  lecture: {
-    intent: "None",
-    entities: { title: "Dialogue systems lecture" },
-  },
-  lunch: {
-    intent: "None",
-    entities: { title: "Lunch at the canteen" },
-  },
-  "on friday": {
-    intent: "None",
-    entities: { day: "Friday" },
-  },
-  "at 8:00 am": { 
-    intent: "None",
-    entities: { time: "8:00 AM" },
-  },
-  "at 9:00 am": { 
-    intent: "None",
-    entities: { time: "9:00 AM" },
-  },"at 10:00 am": { 
-    intent: "None",
-    entities: { time: "10:00 AM" },
-  },"at 11:00 am": { 
-    intent: "None",
-    entities: { time: "11:00 AM" },
-  },"at noon": { 
-    intent: "None",
-    entities: { time: "12:00 PM" },
-  },"at 12:00 am": { 
-    intent: "None",
-    entities: { time: "12:00 PM" },
-  },
-  "at 1:00 pm": { 
-    intent: "None",
-    entities: { time: "1:00 PM" },
-  },"at 2:00 pm": { 
-    intent: "None",
-    entities: { time: "2:00 PM" },
-  },"at 3:00 pm": { 
-    intent: "None",
-    entities: { time: "3:00 PM" },
-  },"at 4:00 pm": { 
-    intent: "None",
-    entities: { time: "4:00 PM" },
-  },"at 5:00 pm": { 
-    intent: "None",
-    entities: { time: "5:00 PM" },
-  },"at 6:00 pm": { 
-    intent: "None",
-    entities: { time: "6:00 PM" },
-  },"at 7:00 pm": { 
-    intent: "None",
-    entities: { time: "7:00 PM" },
-  },
-  "on monday": {
-    intent: "None",
-    entities: { day: "Monday" },
-  },
-  "on tuesday": {
-    intent: "None",
-    entities: { day: "Tuesday" },
-  },
-  "on wednesday": {
-    intent: "None",
-    entities: { day: "Wednesday" },
-  },
-  "on thursday": {
-    intent: "None",
-    entities: { day: "Thursday" },
-  },
-  "on saturday": {
-    intent: "None",
-    entities: { day: "Saturday" },
-  },
-  "on sunday": {
-    intent: "None",
-    entities: { day: "Sunday" },
-  },
-  "yes": {
-    intent: "None",
-    entities: { whole: "Yes", decision: "Yes", meeting:"Yes" },
-  },
-  "no": {
-    intent: "None",
-    entities: { whole: "No", decision: "No", meeting: "No" },
-  },
-  "create a meeting": {
-    intent: "None",
-    entities: { menu: "meeting"},
-  }
-  
-};
+
 
 // This function extracts the entity from the context and removes any query parameters and spaces from it
 const setEntity_Query = (context: SDSContext) => {
@@ -132,17 +30,7 @@ const setEntity = (context: SDSContext) => {
   
 };
 
-// This function checks if the provided entity is present in the grammar object and returns it if found
-const getEntity = (context: SDSContext, entity: string) => {
-  // lowercase the utterance and remove tailing "."
-  let u = context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "");
-  if (u in grammar) {
-    if (entity in grammar[u].entities) {
-      return grammar[u].entities[entity];
-    }
-  }
-  return false;
-};
+//This function sends a request Azure's CLU API with the provided text and returns the JSON response
 const getIntents = (uttering: string) =>
   fetch(
     new Request("https://langauge-res-20345.cognitiveservices.azure.com/language/:analyze-conversations?api-version=2022-10-01-preview", {
@@ -255,7 +143,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
       },
       states: {
         menu_choice: {
-          entry: say(`What would you like me to do?`),
+          entry: say(`What would you like to do or find more about?`),
           on: { ENDSPEECH: "ask" },
         },
         ask: {
@@ -287,12 +175,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
               query: (_context, event) => event.data.result.prediction.entities[0].text,
             }),
           },
+          {
+            target: 'unrecognized_choice',
+            cond: (context, event) => event.data.result.prediction.topIntent != "who is X" && event.data.result.prediction.topIntent!= "create a meeting",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_choice',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_choice: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "menu" },
     },
     success_meeting: {
       entry: send((context) => ({
@@ -391,6 +291,11 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             cond: (context, event) => event.data.result.prediction.topIntent === "Affirmative",
 
           },
+          {
+            target: 'unrecognized_meeting',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Affirmative" && event.data.result.prediction.topIntent != "Negative",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_meeting',
@@ -405,6 +310,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
         value: `I don't know who that is.`,
       })),
       on: { ENDSPEECH: "menu" },
+    },
+    unrecognized_meeting: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "meeting_ask" },
     },
     success_deny_meeting: {
       entry: send((context) => ({
@@ -480,12 +392,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             day: (_context, event) => event.data.result.prediction.entities[0].text,
             }),
           },
+          {
+            target: 'unrecognized_day',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Days",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_day',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_day: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "day" },
     },
     success_day: {
       entry: send((context) => ({
@@ -547,12 +471,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             cond: (context, event) => event.data.result.prediction.topIntent === "Affirmative",
 
           },
+          {
+            target: 'unrecognized_whole',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Affirmative" && event.data.result.prediction.topIntent != "Negative",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_whole',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_whole: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "whole" },
     },
     success_deny_whole: {
       entry: send((context) => ({
@@ -621,12 +557,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             time: (_context, event) => event.data.result.prediction.entities[0].text,
             }),
           },
+          {
+            target: 'unrecognized_time',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Time",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_time',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_time: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "time" },
     },
     success_time: {
       entry: send((context) => ({
@@ -728,12 +676,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             cond: (context, event) => event.data.result.prediction.topIntent === "Affirmative",
 
           },
+          {
+            target: 'unrecognized_final_ask',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Affirmative" && event.data.result.prediction.topIntent != "Negative",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_final_ask',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_final_ask: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "final_ask" },
     },
     success_deny_final_ask: {
       entry: send((context) => ({
@@ -770,12 +730,24 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             cond: (context, event) => event.data.result.prediction.topIntent === "Affirmative",
 
           },
+          {
+            target: 'unrecognized_final_time_ask',
+            cond: (context, event) => event.data.result.prediction.topIntent != "Affirmative" && event.data.result.prediction.topIntent != "Negative",
+            actions: (context, event) => console.log(event.data.result)
+          },
         ],
         onError: {
           target: 'failure_final_time_ask',
           actions: (context, event) => console.log(event.data)
         }
       }
+    },
+    unrecognized_final_time_ask: {
+      entry: send((context) => ({
+        type: "SPEAK",
+        value: `Sorry, I didn't understand that.`,
+      })),
+      on: { ENDSPEECH: "final_time_ask" },
     },
     success_deny_final_time_ask: {
       entry: send((context) => ({
