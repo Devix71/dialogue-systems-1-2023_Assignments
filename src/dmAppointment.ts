@@ -501,11 +501,18 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
         RECOGNISED: [
           {
             target: "info_final_ask",
-            cond: (context) => !!getEntity(context, "decision"),
+            cond: (context) => getEntity(context, "decision") === "Yes",
             actions: assign({
               decision: (context) => getEntity(context, "decision"),
             }),
           },
+          {
+            target: "idle",
+            cond: (context) => getEntity(context, "decision") === "No",
+            actions: assign({
+              whole: (context) => getEntity(context, "decision"),
+            }),
+          }, 
           {
             target: ".nomatch",
           },
