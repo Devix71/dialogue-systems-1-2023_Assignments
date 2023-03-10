@@ -41,6 +41,8 @@ interface SDSContext {
 
 
   time: any;
+  counter: int;
+  help: any;
   whole: any;
   decision: any;
   parameters: Parameters;
