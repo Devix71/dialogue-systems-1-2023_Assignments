@@ -1,0 +1,11 @@
+<!--ID=B7267351-473F-409D-9765-754A8EBCDE05;Version=1|{"VoiceNameToIdMapItems":[{"Id":"e5e4f59b-65c6-42b2-a6e3-5985d1a1ea07","Name":"Microsoft Server Speech Text to Speech Voice (en-US, JennyNeural)","ShortName":"en-US-JennyNeural","Locale":"en-US","VoiceType":"StandardVoice"}]}-->
+<!--ID=FCB40C2B-1F9F-4C26-B1A1-CF8E67BE07D1;Version=1|{"Files":{}}-->
+<!--ID=5B95B1CC-2C7B-494F-B746-CF22A0E779B7;Version=1|{"Locales":{"en-US":{"AutoApplyCustomLexiconFiles":[{}]}}}-->
+<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" version="1.0" xml:lang="en-US"><voice name="en-US-JennyNeural"><s /><mstts:express-as style="unfriendly"><prosody volume="+50.00%" pitch="-10.00%"><phoneme alphabet="ipa" ph="pjʊɹ">Pure?</phoneme></prosody><break strength="medium" /></mstts:express-as><s /><mstts:express-as style="unfriendly"> </mstts:express-as><s />
+<s /><mstts:express-as style="unfriendly"><prosody rate="-5.00%" pitch="-5.00%"><phoneme alphabet="ipa" ph="woʊt.əˈz.ɪt.min">What does it mean?</phoneme></prosody></mstts:express-as><s />
+<mstts:express-as style="unfriendly"><prosody rate="-8.00%" pitch="-5.00%"></prosody></mstts:express-as><s /><mstts:express-as style="unfriendly"><prosody rate="-8.00%" pitch="-5.00%" contour="(4%, -97%) (19%, +0%) (32%, -98%) (46%, -4%) (57%, -100%)">The Tongues of Hell are DuLL</prosody><break strength="medium" />
+<prosody rate="-10.00%" pitch="-5.00%" contour="(1%, -98%) (12%, +4%) (30%, -96%) (52%, -4%) (84%, -100%)">Dull as the Triple Tongues of Dull, Fat, Cerberus</prosody><break strength="x-weak" /></mstts:express-as>
+<s /><mstts:express-as style="unfriendly"><prosody rate="-11.00%" pitch="-7.00%" contour="(11%, -89%) (39%, -96%)">Who <phoneme alphabet="ipa" ph="hwiˌzis">Wheezes</phoneme> at the Gate</prosody></mstts:express-as><s />
+<mstts:express-as style="unfriendly"><prosody rate="-11.00%" pitch="-7.00%" contour="(11%, -89%) (39%, -96%)">Incapable of licking clean
+The aguey tendon, the sin, the sin.
+</prosody></mstts:express-as></voice></speak>

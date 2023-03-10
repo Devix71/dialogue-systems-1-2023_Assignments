@@ -1,0 +1,13 @@
+broadness -> mispronounced as "bɹɔdnɛs"
+Magna Graecia -> mispronounced as "mæˈg.nə.gɹiˈ.ʃi.ə"
+inquiry -> mispronounced as "ɪn.kwaɪˈ.ɹi"
+Cicero -> mispronounced as "sɪˈ.sə.ɹoˌ"
+ravioli -> mispronounced as "ɹæ.vi.oˈ.li"
+carnitas -> mispronounced as "kɑˌɹ.niˈ.təs"
+Dante Alighieri -> mispronounced as "dɑˈn.teɪ.æ.li.ɛˈ.ɹi"
+ersatz -> mispronounced as "ɛˈɹ.zæts"
+Fromboli -> mispronounced as "fɹɑˈm.bə.laɪ"
+Spanakopita -> mispronounced as "spæˌ.nə.kɑˈ.pɪ.tə"
+
+
+Lexicon link -> https://cvoiceprodneu.blob.core.windows.net/acc-public-files/10e7f6b034144f9d93f2bc80ccc791c7/c9e3e377-f361-4962-acbf-82df01d2da1f.xml
