@@ -41,8 +41,11 @@ interface SDSContext {
 
 
   time: any;
+  low_conf_utt: low_conf_utt;
+  username: username;
   counter: int;
   help: any;
+  confidence: Number;
   whole: any;
   decision: any;
   parameters: Parameters;
