@@ -127,12 +127,30 @@ const setEntity_Query = (context: SDSContext) => {
 // This function extracts the entity from the context and returns it
 const setEntity = (context: SDSContext) => {
 
-  
+
   let u = String(context.recResult[0].utterance);
 
   return u;
   
 };
+
+
+
+// This function extracts the entity from the context and returns it
+const setEntity_counter = (context: SDSContext) => {
+
+
+    if (context.counter == null ){
+        context.counter = 0
+    }
+
+    
+
+
+  
+    return context.counter;
+    
+  };
 
 // This function checks if the provided entity is present in the grammar object and returns it if found
 const getEntity = (context: SDSContext, entity: string) => {
@@ -147,49 +165,148 @@ const getEntity = (context: SDSContext, entity: string) => {
 };
 
 
+
 // This function sends a request to DuckDuckGo's API with the provided text and returns the JSON response
 const kbRequest = (text: string) =>
 
-
-  fetch(
-    new Request(
-      `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`
-    )
-  ).then((data) => data.json());
-    
+fetch(
+  new Request(
+    `https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`
+  )
+).then((data) => data.json());
+  
 
 // This exports a state machine for a dialogue manager 
 export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
-    initial: "idle",
-    states: {
-      idle: {
-        on: {
-          CLICK: "init",
-        },
+  initial: "idle",
+  states: {
+    idle: {
+      on: {
+        CLICK: "init",
       },
-      init: {
-        on: {
-          TTS_READY: "intro",
-          CLICK: "intro",
-        },
+    },
+    init: {
+      on: {
+        TTS_READY: "intro",
+        CLICK: "intro",
       },
-      intro: {
-        initial: "intro",
-        entry: assign({ counter: 0 }),
+    },
+
+    intro: {
+      initial: "intro",
+      entry: assign({ counter: (context) => setEntity_counter(context, 'counter') }),
+      on: {
+        RECOGNISED: [
+
+          {
+            target: "intro_info",
+            cond: (context) => context.recResult[0].confidence > 0.5,
+            actions: assign({
+                
+              username: (context) => setEntity(context, "username"),
+            }),
+          },
+          {
+            target: "intro_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5,
+            actions: assign({
+                  
+              low_conf_utt: (context) => setEntity(context, "low_conf_utt"),
+            }),
+            },
+          {
+            target: ".nomatch",
+            
+          },
+
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+      },
+      states: {
+        intro: {
+          entry: say("Hello, I am your personal assistant, how may I address you?"),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: [send("LISTEN"),
+          //assign({confidence: (context) => setEntity_confidence(context),})
+          
+        ],
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I didn't quite get that, please tell me once more."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry:[ say(
+              "Oh, you probably weren't paying attention, I'll ask again. How may I address you?"
+            ),
+            assign({ counter: (context) => context.counter+=1 }), // increment counter
+            ],
+
+            on: { ENDSPEECH: "ask" },
+          },
+
+      },
+    },
+    intro_low_conf: {
+        initial: "prompt",
+        entry: assign({ counter: (context) => context.counter = 0 }),
         on: {
           RECOGNISED: [
             {
               target: "intro_info",
+              cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
               actions: assign({
-                username: (context) => setEntity(context, "username"),
+                username: (context) => context.low_conf_utt,
+                //title: (context) => `meeting with ${context.query}`,
               }),
             },
+            {
+              target: "intro",
+              cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+            },          
+            {
+              target: ".nomatch",
+            },
+  
           ],
-          TIMEOUT: ".timer",
+          TIMEOUT: [
+              {
+                target: ".timer",
+                cond: (context) => context.counter < 3,
+                actions: assign({
+                  counter: (context) => setEntity_counter(context, 'counter'),
+                }),
+              },
+              {
+                target: "init",
+                cond: (context) => context.counter >= 3,
+              },
+            ],
+  
         },
         states: {
-          intro: {
-            entry: say("Hello, I am your personal assistant, how may I address you?"),
+          prompt: {
+            entry: send((context) => ({
+                type: "SPEAK",
+                value: `Are you sure you meant ${context.low_conf_utt} ?`,
+              })),
             on: { ENDSPEECH: "ask" },
           },
           ask: {
@@ -197,30 +314,21 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           },
           nomatch: {
             entry: say(
-              "Sorry, I didn't quite get that, please tell me once more."
+              "Sorry, I don't know what it is. Tell me something I know."
             ),
             on: { ENDSPEECH: "ask" },
           },
           timer: {
-              entry:[ say(
-                "Oh, you probably weren't paying attention, I'll ask again. How may I address you?"
-              ),
-              assign({ counter: (context) => context.counter + 1 }), // increment counter
-              ],
-
-              on: { ENDSPEECH: "checkTimer" },
+              entry: [send((context) => ({
+                type: "SPEAK",
+                value: `Oh you probably weren't paying attention. I'll ask again:
+                Are you sure you meant ${context.low_conf_utt} ?`,
+              })),
+              
+              assign({ counter: (context) => context.counter+=1 }),],
+              
+              on: { ENDSPEECH: "ask" },
             },
-            checkTimer: {
-                always: [
-                  {
-                    target: "idle", // transition to idle state if counter is 3
-                    cond: (context) => context.counter === 3,
-                  },
-                  {
-                    target: "ask", // transition to ask state otherwise
-                  },
-                ],
-              },
         },
       },
     intro_info: {
@@ -232,18 +340,34 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     menu: {
       initial: "menu_choice",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "info_meeting_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
+              {
+                target: "menu_low_conf",
+                cond: (context) => context.recResult[0].confidence <0.5 && !!getEntity(context, "menu"),
+                actions: assign({
+                      
+                  low_conf_utt: (context) => setEntity(context, "low_conf_utt"),
+                }),
+                },
           {
             target: "info_meeting",
-            cond: (context) => !!getEntity(context, "menu"),
+            cond: (context) => context.recResult[0].confidence >= 0.5 && !!getEntity(context, "menu"),
             actions: assign({
               menu: (context) => getEntity(context, "menu"),
             }),
           },
           {
             target: "search",
-            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") != "create a meeting",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") != "create a meeting",
             actions: assign(
             {
               
@@ -251,17 +375,34 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
             }),
           },   
           {
+            target: "search_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") != "create a meeting",
+            actions: assign(
+            {
+              
+              low_conf_utt: (context) => setEntity(context, "low_conf_utt"),
+            }),
+          },   
+
+          {
             target: ".nomatch",
           },
-          {
-            target: "info_meeting_help",
-            cond: (context) => !!getEntity(context, "help"),
-            actions: assign({
-              help: (context) => getEntity(context, "help"),
-            }),
-          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         menu_choice: {
@@ -278,9 +419,144 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry:[ say(
               "Oh, you probably weren't paying attention, I'll ask again. What would you like me to do?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
+            on: { ENDSPEECH: "ask" },
+          },
+
+      },
+    },
+    menu_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_meeting",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              menu: (context) => context.low_conf_utt,
+              
+            }),
+          },
+          {
+            target: "menu",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+    search_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "search",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              query: (context) => setEntity_Query(context.low_conf_utt),
+            }),
+          },
+          {
+            target: "menu",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
             on: { ENDSPEECH: "ask" },
           },
       },
@@ -319,35 +595,66 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     meeting_ask: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "info_meeting_ask_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info",
-            cond: (context) => getEntity(context, "meeting") === "Yes",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "meeting") === "Yes",
             actions: assign({
               meeting: (context) => getEntity(context, "meeting"),
               title: (context) => `meeting with ${context.query}`,
             }),
           },
           {
+            target: "meeting_ask_yes_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "meeting") === "Yes",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context, "low_conf_utt"),
+
+            }),
+          },
+          {
             target: "idle",
-            cond: (context) => getEntity(context, "meeting") === "No",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "meeting") === "No",
             actions: assign({
               meeting: (context) => getEntity(context, "meeting"),
             }),
-          },          
+          },      
+          {
+            target: "meeting_ask_no_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "meeting") === "No",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context, "low_conf_utt"),
+
+            }),
+          },    
           {
             target: ".nomatch",
           },
-          {
-            target: "info_meeting_ask_help",
-            cond: (context) => !!getEntity(context, "help"),
-            actions: assign({
-              help: (context) => getEntity(context, "help"),
-            }),
-          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -364,13 +671,149 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry: [say(
               "Oh, you probably weren't paying attention, I'll ask again. Would you like to meet them?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
+            
             on: { ENDSPEECH: "ask" },
           },
       },
     },
+    meeting_ask_yes_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              meeting: (context) => setEntity(context.low_conf_utt),
+              title: (context) => `meeting with ${context.query}`,
+              
+            }),
+          },
+          {
+            target: "meeting_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+    meeting_ask_no_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "idle",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+
+          },
+          {
+            target: "meeting_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
+
     info_meeting_ask_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -395,27 +838,49 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     meeting: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "meeting_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info",
-            cond: (context) => !!getEntity(context, "title"),
+            cond: (context) => context.recResult[0].confidence >= 0.5 && !!getEntity(context, "title"),
             actions: assign({
               title: (context) => getEntity(context, "title"),
             }),
           },
           {
-            target: ".nomatch",
-          },
-          {
-            target: "meeting_help",
-            cond: (context) => !!getEntity(context, "help"),
+            target: "meeting_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && !!getEntity(context, "title"),
             actions: assign({
-              help: (context) => getEntity(context, "help"),
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
             }),
           },
+          {
+            target: ".nomatch",
+          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -432,13 +897,81 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry: [say(
               "Oh, you probably weren't paying attention, I'll ask again. What is it about?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
             on: { ENDSPEECH: "ask" },
           },
       },
     },
+    meeting_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "day",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              title: (context) => setEntity(context.low_conf_utt),
+            }),
+          },
+          {
+            target: "meeting",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     meeting_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -455,27 +988,49 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     day: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "day_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info_day",
-            cond: (context) => !!getEntity(context, "day"),
+            cond: (context) => context.recResult[0].confidence >= 0.5 && !!getEntity(context, "day"),
             actions: assign({
               day: (context) => getEntity(context, "day"),
             }),
           },
           {
-            target: ".nomatch",
-          },
-          {
-            target: "day_help",
-            cond: (context) => !!getEntity(context, "help"),
+            target: "day_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && !!getEntity(context, "day"),
             actions: assign({
-              help: (context) => getEntity(context, "help"),
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
             }),
           },
+          {
+            target: ".nomatch",
+          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -490,15 +1045,83 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry: [say(
               "Oh, you probably weren't paying attention, I'll ask again. On which day is it?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
             on: { ENDSPEECH: "ask" },
           },
 
       },
 
     },
+    day_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_day",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              day: (context) => setEntity(context.low_conf_utt),
+            }),
+          },
+          {
+            target: "day",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     day_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -515,34 +1138,63 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     whole: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "whole_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info_whole",
-            cond: (context) => getEntity(context, "whole") === "Yes",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "whole") === "Yes",
             actions: assign({
               whole: (context) => getEntity(context, "whole"),
+            }),
+          },
+          {
+            target: "whole_yes_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "whole") === "Yes",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
             }),
           },
           {
             target: "info_whole_no",
-            cond: (context) => getEntity(context, "whole") === "No",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "whole") === "No",
             actions: assign({
               whole: (context) => getEntity(context, "whole"),
             }),
-          },          
+          },  
+          {
+            target: "whole_no_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "whole") === "No",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
+            }),
+          },        
           {
             target: ".nomatch",
           },
-          {
-            target: "whole_help",
-            cond: (context) => !!getEntity(context, "help"),
-            actions: assign({
-              help: (context) => getEntity(context, "help"),
-            }),
-          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -557,14 +1209,153 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry: [say(
               "Oh, you probably weren't paying attention, I'll ask again. Will it take the whole day?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
             on: { ENDSPEECH: "ask" },
           },
 
       },
     },
+    whole_yes_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_whole",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              whole: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+          },
+          {
+            target: "whole",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+    whole_no_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_whole_no",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              whole: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+
+          },
+          {
+            target: "whole",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     whole_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -581,29 +1372,52 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     time: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "time_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info_time",
             
-            cond: (context) => !!getEntity(context, "time") ,
+            cond: (context) => context.recResult[0].confidence >= 0.5 && !!getEntity(context, "time") ,
             actions: assign({
               time: (context) => getEntity(context, "time"),
+            }),
+          },
+          {
+            target: "time_low_conf",
+            
+            cond: (context) => context.recResult[0].confidence < 0.5 && !!getEntity(context, "time") ,
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
             }),
           },
           {
 
             target: ".nomatch",
           },
-          {
-            target: "time_help",
-            cond: (context) => !!getEntity(context, "help"),
-            actions: assign({
-              help: (context) => getEntity(context, "help"),
-            }),
-          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -618,15 +1432,83 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: say(
+            entry: [say(
               "Oh, you probably weren't paying attention, I'll ask again. What time is your meeting?"
             ),
+            assign({ counter: (context) => context.counter+=1 }),],
             on: { ENDSPEECH: "ask" },
           },
 
       },
 
     },
+    time_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_time",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              time: (context) => setEntity(context.low_conf_utt),
+            }),
+          },
+          {
+            target: "time",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     time_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -644,34 +1526,64 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     final_time_ask: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "final_time_ask_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info_final_ask",
-            cond: (context) => getEntity(context, "decision") === "Yes",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "decision") === "Yes",
             actions: assign({
               decision: (context) => getEntity(context, "decision"),
             }),
           },
           {
+            target: "final_time_ask_yes_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "decision") === "Yes",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
+            }),
+          },
+          {
             target: "idle",
-            cond: (context) => getEntity(context, "decision") === "No",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "decision") === "No",
             actions: assign({
               whole: (context) => getEntity(context, "decision"),
             }),
           }, 
           {
+            target: "final_time_ask_no_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "decision") === "No",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
+            }),
+          }, 
+
+          {
             target: ".nomatch",
           },
-          {
-            target: "final_time_ask_help",
-            cond: (context) => !!getEntity(context, "help"),
-            actions: assign({
-              help: (context) => getEntity(context, "help"),
-            }),
-          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -689,14 +1601,154 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: send((context) => ({
+            entry: [send((context) => ({
                 type: "SPEAK",
                 value: `Oh you probably weren't paying attention. I'll ask again.
                 Do you want me to create a meeting titled ${context.title} on ${context.day} at ${context.time}?`,
               })),
+              assign({ counter: (context) => context.counter+=1 }),],
               on: { ENDSPEECH: "ask" },          },
       },
     },
+
+    final_time_ask_yes_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_final_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              decision: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+          },
+          {
+            target: "final_time_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+    final_time_ask_no_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "idle",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              decision: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+
+          },
+          {
+            target: "final_time_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     final_time_ask_help: {
         entry: send((context) => ({
           type: "SPEAK",
@@ -714,34 +1766,64 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
     },
     final_ask: {
       initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
       on: {
         RECOGNISED: [
+            {
+                target: "final_ask_help",
+                cond: (context) => !!getEntity(context, "help"),
+                actions: assign({
+                  help: (context) => getEntity(context, "help"),
+                }),
+              },
           {
             target: "info_final_ask",
-            cond: (context) => getEntity(context, "decision") === "Yes",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "decision") === "Yes",
             actions: assign({
               decision: (context) => getEntity(context, "decision"),
             }),
           },
           {
+            target: "final_ask_yes_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "decision") === "Yes",
+            actions: assign({
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
+            }),
+          },
+
+          {
             target: "idle",
-            cond: (context) => getEntity(context, "decision") === "No",
+            cond: (context) => context.recResult[0].confidence >= 0.5 && getEntity(context, "decision") === "No",
             actions: assign({
               whole: (context) => getEntity(context, "decision"),
             }),
           }, 
           {
-            target: ".nomatch",
-          },
-          {
-            target: "final_ask_help",
-            cond: (context) => !!getEntity(context, "help"),
+            target: "final_ask_no_low_conf",
+            cond: (context) => context.recResult[0].confidence < 0.5 && getEntity(context, "decision") === "No",
             actions: assign({
-              help: (context) => getEntity(context, "help"),
+              low_conf_utt: (context) => setEntity(context.low_conf_utt),
             }),
           },
+          {
+            target: ".nomatch",
+          },
+
         ],
-        TIMEOUT: ".timer",
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter > 3,
+            },
+          ],
+
       },
       states: {
         prompt: {
@@ -755,19 +1837,158 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = {
           entry: send("LISTEN"),
         },
         nomatch: {
-          entry: say("Sorry, I don't understand which day you are referring to."),
+          entry: say("Sorry, I didn't understand what you said."),
           on: { ENDSPEECH: "ask" },
         },
         timer: {
-            entry: send((context) => ({
+            entry: [send((context) => ({
                 type: "SPEAK",
                 value: `Oh you probably weren't paying attention. I'll ask again.
                 Do you want me to create a meeting titled ${context.title} on ${context.day} for the whole day?`,
               })),
+              assign({ counter: (context) => context.counter+=1 }),],
               on: { ENDSPEECH: "ask" },          },
 
       },
     },
+    final_ask_yes_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "info_final_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              decision: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+          },
+          {
+            target: "final_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+    final_ask_no_low_conf: {
+      initial: "prompt",
+      entry: assign({ counter: (context) => context.counter = 0 }),
+      on: {
+        RECOGNISED: [
+          {
+            target: "idle",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "yes",
+            actions: assign({
+              decision: (context) => setEntity(context.low_conf_utt),
+
+              
+            }),
+
+          },
+          {
+            target: "final_ask",
+            cond: (context) => context.recResult[0].utterance.toLowerCase().replace(/\.$/g, "") === "no",
+          },          
+          {
+            target: ".nomatch",
+          },
+
+        ],
+        TIMEOUT: [
+            {
+              target: ".timer",
+              cond: (context) => context.counter < 3,
+              actions: assign({
+                counter: (context) => setEntity_counter(context, 'counter'),
+              }),
+            },
+            {
+              target: "init",
+              cond: (context) => context.counter >= 3,
+            },
+          ],
+
+      },
+      states: {
+        prompt: {
+          entry: send((context) => ({
+              type: "SPEAK",
+              value: `Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+          on: { ENDSPEECH: "ask" },
+        },
+        ask: {
+          entry: send("LISTEN"),
+        },
+        nomatch: {
+          entry: say(
+            "Sorry, I don't know what it is. Tell me something I know."
+          ),
+          on: { ENDSPEECH: "ask" },
+        },
+        timer: {
+            entry: [send((context) => ({
+              type: "SPEAK",
+              value: `Oh you probably weren't paying attention. I'll ask again:
+              Are you sure you meant ${context.low_conf_utt} ?`,
+            })),
+            
+            assign({ counter: (context) => context.counter+=1 }),],
+            
+            on: { ENDSPEECH: "ask" },
+          },
+      },
+    },
+
     final_ask_help: {
         entry: send((context) => ({
           type: "SPEAK",
